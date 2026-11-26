@@ -52,13 +52,12 @@
     const mobileViewport = window.matchMedia("(max-width: 440px)");
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const orientationEvent = window.DeviceOrientationEvent;
-    const lens = {
-      sensitivity: 2.2 * Math.PI / 180,
-      deadZone: 0.12 * Math.PI / 180,
-      maxCompression: 0.74,
-      minSpread: 0.13,
-      maxSpread: 0.34,
-      travel: 0.36,
+    const stretch = {
+      minScale: 1,
+      maxScale: 16,
+      sensitivity: 2 * Math.PI / 180,
+      deadZone: 0.08 * Math.PI / 180,
+      exponent: 0.8,
       smoothing: 0.85 // Fraction of the newest sample.
     };
     const debug = new URLSearchParams(window.location.search).get("debug") === "1"
@@ -81,8 +80,7 @@
     let hasHeading = false;
     let calibration = null;
     let orientation = null;
-    let lensFrame = 0;
-    let glyphs = [];
+    let orientationFrame = 0;
     let lastPointerX = null;
     let currentScale = 1;
     let touchMaxScale = maxScale;
@@ -138,64 +136,33 @@
       if (!calibration) {
         calibration = sample;
         orientation = sample;
-        // Keep the current title width when the sensor takes over from scroll.
+        // Cancel any pending scroll deformation when the sensor takes over.
         cancelAnimationFrame(scaleFrame);
         scaleFrame = 0;
       } else {
         // q and -q encode the same pose. Keep samples in the same hemisphere before blending.
         const dot = orientation.reduce((sum, value, index) => sum + value * sample[index], 0);
         const sign = dot < 0 ? -1 : 1;
-        const blended = orientation.map((value, index) => value + lens.smoothing * (sign * sample[index] - value));
+        const blended = orientation.map((value, index) => value + stretch.smoothing * (sign * sample[index] - value));
         const length = Math.hypot(...blended);
         orientation = blended.map(value => value / length);
       }
-      if (!lensFrame) lensFrame = requestAnimationFrame(renderLens);
+      if (!orientationFrame) orientationFrame = requestAnimationFrame(applyOrientationScale);
       updateDebug();
     }
 
-    function renderLens() {
-      lensFrame = 0;
+    function applyOrientationScale() {
+      orientationFrame = 0;
       if (!orientation) return;
 
-      if (!glyphs.length || glyphs[0].parentNode !== textElement) {
-        glyphs = Array.from(textElement.childNodes)
-          .filter(node => node.nodeType === Node.TEXT_NODE && node.data.trim())
-          .map(node => {
-            const glyph = document.createElement("span");
-            glyph.style.display = "inline-block";
-            node.before(glyph);
-            glyph.append(node);
-            return glyph;
-          });
-      }
-      if (!glyphs.length) return;
-
-      // Conjugate(calibration) × orientation expresses the pose in the initial device frame.
-      const [a, b, c, d] = calibration;
-      const [w, x, y, z] = orientation;
-      const scalar = a * w + b * x + c * y + d * z;
-      const front = a * x - b * w - c * z + d * y;
-      const lateral = a * y + b * z - c * w - d * x;
-      const axial = a * z - b * y + c * x - d * w;
-      // Sign-invariant magnitudes stay continuous across half and full turns.
-      const response = component => {
-        const magnitude = Math.hypot(2 * scalar * component, 2 * component * component);
-        return 1 - Math.exp(-Math.pow(Math.max(0, magnitude - lens.deadZone) / lens.sensitivity, 1.15));
-      };
-      const side = 2 * scalar * lateral;
-      const center = 0.5 + lens.travel * Math.tanh(side / (lens.sensitivity + 0.8 * (1 - scalar * scalar)));
-      const twist = response(axial);
-      const spread = lens.minSpread + twist * (lens.maxSpread - lens.minSpread);
-      const depth = lens.maxCompression * Math.max(response(front), 0.8 * response(lateral), 0.65 * twist);
-      const weights = glyphs.map((_, index) => {
-        const distance = (index / Math.max(1, glyphs.length - 1) - center) / spread;
-        return Math.exp(-0.5 * distance * distance);
-      });
-      // Keep one line at its original width and squeeze the others around their center.
-      const edge = Math.min(...weights);
-      glyphs.forEach((glyph, index) => {
-        glyph.style.transform = `scaleX(${(1 - depth * (weights[index] - edge)).toFixed(4)})`;
-      });
+      // The absolute dot product gives the shortest turn from calibration across all three axes.
+      const dot = calibration.reduce((sum, value, index) => sum + value * orientation[index], 0);
+      const angle = 2 * Math.acos(Math.min(1, Math.abs(dot)));
+      const movement = Math.max(0, angle - stretch.deadZone) / stretch.sensitivity;
+      const intensity = -Math.expm1(-Math.pow(movement, stretch.exponent));
+      const largestScale = Math.min(stretch.maxScale, touchMaxScale);
+      const smallestScale = Math.min(stretch.minScale, largestScale);
+      setScale(smallestScale + (largestScale - smallestScale) * intensity);
     }
 
     function canUseOrientation() {
@@ -210,15 +177,13 @@
           window.addEventListener("deviceorientation", sampleOrientation);
         } else {
           window.removeEventListener("deviceorientation", sampleOrientation);
-          cancelAnimationFrame(lensFrame);
-          lensFrame = 0;
+          cancelAnimationFrame(orientationFrame);
+          orientationFrame = 0;
           calibration = null;
           orientation = null;
           heading = 0;
           headingOffset = 0;
           hasHeading = false;
-          glyphs.forEach(glyph => glyph.replaceWith(...glyph.childNodes));
-          glyphs = [];
           applyScrollScale();
         }
       }
@@ -259,7 +224,7 @@
       naturalWidth = textElement.offsetWidth;
       touchMaxScale = Math.max(1, availableWidth / naturalWidth);
       if (touchViewport.matches) setScale(Math.min(currentScale, touchMaxScale));
-      if (orientation && !lensFrame) lensFrame = requestAnimationFrame(renderLens);
+      if (orientation && !orientationFrame) orientationFrame = requestAnimationFrame(applyOrientationScale);
     }
 
     function applyScale(clientX) {
