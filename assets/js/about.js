@@ -61,8 +61,24 @@
       travel: 0.36,
       smoothing: 0.85 // Fraction of the newest sample.
     };
-    let orientationEnabled = false;
-    let permissionRequested = false;
+    const debug = new URLSearchParams(window.location.search).get("debug") === "1"
+      ? document.createElement("pre")
+      : null;
+    if (debug) {
+      debug.id = "about-orientation-debug";
+      debug.style.cssText = "position:fixed;z-index:10000;left:8px;bottom:28px;max-width:calc(100% - 16px);margin:0;padding:8px;background:#111;color:#fff;font:12px/1.4 monospace;white-space:pre-wrap;pointer-events:none";
+      document.body.append(debug);
+    }
+    let permission = "unsupported";
+    if (orientationEvent) {
+      permission = typeof orientationEvent.requestPermission === "function" ? "prompt" : "automatic";
+    }
+    let listening = false;
+    let eventCount = 0;
+    let rawAngles = "alpha: —  beta: —  gamma: —";
+    let heading = 0;
+    let headingOffset = 0;
+    let hasHeading = false;
     let calibration = null;
     let orientation = null;
     let lensFrame = 0;
@@ -78,11 +94,39 @@
       textElement.style.transform = `scaleX(${scale.toFixed(3)})`;
     }
 
+    function updateDebug() {
+      if (!debug) return;
+      const mode = orientation ? "orientation" : touchViewport.matches ? "scroll" : "pointer";
+      debug.textContent = [
+        `Viewport: ${document.documentElement.clientWidth}px (≤440px: ${mobileViewport.matches ? "yes" : "no"})`,
+        `Secure context: ${window.isSecureContext ? "yes" : "no"}`,
+        `Permission: ${permission}`,
+        `Listener: ${listening ? "on" : "off"}  Events: ${eventCount}`,
+        rawAngles,
+        `Mode: ${mode}`
+      ].join("\n");
+    }
+
     function sampleOrientation({ alpha, beta, gamma }) {
-      if (![alpha, beta, gamma].every(Number.isFinite)) return;
+      if (debug) {
+        eventCount += 1;
+        rawAngles = `alpha: ${alpha}  beta: ${beta}  gamma: ${gamma}`;
+      }
+      if (!Number.isFinite(beta) || !Number.isFinite(gamma)) {
+        updateDebug();
+        return;
+      }
+      // Hold the last heading during a dropout and align the first returning reading to it.
+      if (Number.isFinite(alpha)) {
+        if (!hasHeading && calibration) headingOffset = heading - alpha;
+        heading = alpha + headingOffset;
+        hasHeading = true;
+      } else {
+        hasHeading = false;
+      }
       // DeviceOrientation uses intrinsic Z-X′-Y″ rotations. Convert to a unit quaternion first.
       const halfDegrees = Math.PI / 360;
-      const [z, x, y] = [alpha, beta, gamma].map(angle => angle * halfDegrees);
+      const [z, x, y] = [heading, beta, gamma].map(angle => angle * halfDegrees);
       const [cz, cx, cy] = [Math.cos(z), Math.cos(x), Math.cos(y)];
       const [sz, sx, sy] = [Math.sin(z), Math.sin(x), Math.sin(y)];
       const sample = [
@@ -94,6 +138,9 @@
       if (!calibration) {
         calibration = sample;
         orientation = sample;
+        // Keep the current title width when the sensor takes over from scroll.
+        cancelAnimationFrame(scaleFrame);
+        scaleFrame = 0;
       } else {
         // q and -q encode the same pose. Keep samples in the same hemisphere before blending.
         const dot = orientation.reduce((sum, value, index) => sum + value * sample[index], 0);
@@ -103,6 +150,7 @@
         orientation = blended.map(value => value / length);
       }
       if (!lensFrame) lensFrame = requestAnimationFrame(renderLens);
+      updateDebug();
     }
 
     function renderLens() {
@@ -150,31 +198,46 @@
       });
     }
 
-    function syncOrientation() {
-      const enabled = Boolean(orientationEvent && window.isSecureContext && mobileViewport.matches && !reducedMotion.matches);
-      if (enabled === orientationEnabled) return;
-      orientationEnabled = enabled;
-      if (enabled) {
-        window.addEventListener("deviceorientation", sampleOrientation);
-      } else {
-        window.removeEventListener("deviceorientation", sampleOrientation);
-        cancelAnimationFrame(lensFrame);
-        lensFrame = 0;
-        calibration = null;
-        orientation = null;
-        glyphs.forEach(glyph => glyph.replaceWith(...glyph.childNodes));
-        glyphs = [];
-      }
+    function canUseOrientation() {
+      return window.isSecureContext && mobileViewport.matches && !reducedMotion.matches;
     }
 
-    textElement.addEventListener("click", async () => {
-      if (!orientationEnabled || calibration || permissionRequested || typeof orientationEvent.requestPermission !== "function") return;
-      permissionRequested = true;
-      try {
-        await orientationEvent.requestPermission();
-      } catch {
-        // The existing scroll interaction still works when permission is unavailable.
+    function syncOrientation() {
+      const shouldListen = canUseOrientation() && (permission === "automatic" || permission === "granted");
+      if (shouldListen !== listening) {
+        listening = shouldListen;
+        if (listening) {
+          window.addEventListener("deviceorientation", sampleOrientation);
+        } else {
+          window.removeEventListener("deviceorientation", sampleOrientation);
+          cancelAnimationFrame(lensFrame);
+          lensFrame = 0;
+          calibration = null;
+          orientation = null;
+          heading = 0;
+          headingOffset = 0;
+          hasHeading = false;
+          glyphs.forEach(glyph => glyph.replaceWith(...glyph.childNodes));
+          glyphs = [];
+          applyScrollScale();
+        }
       }
+      updateDebug();
+    }
+
+    stage.addEventListener("click", async () => {
+      if (!canUseOrientation() || (permission !== "prompt" && permission !== "error")) return;
+      permission = "requesting";
+      try {
+        // Safari requires the call to start within the trusted tap, before any await.
+        const request = orientationEvent.requestPermission();
+        updateDebug();
+        const result = await request;
+        permission = result === "granted" ? "granted" : "denied";
+      } catch {
+        permission = "error";
+      }
+      syncOrientation();
     });
 
     mobileViewport.addEventListener("change", syncOrientation);
@@ -216,14 +279,14 @@
 
     function applyScrollScale() {
       scaleFrame = 0;
-      if (!touchViewport.matches) return;
+      if (!touchViewport.matches || orientation) return;
       const distance = Math.max(1, stage.clientHeight * 1.5);
       const progress = Math.min(1, Math.max(0, window.scrollY * (tabletViewport.matches ? 1 : 2) / distance));
       setScale(1 + progress * (touchMaxScale - 1));
     }
 
     window.addEventListener("scroll", () => {
-      if (!touchViewport.matches || scaleFrame) return;
+      if (!touchViewport.matches || orientation || scaleFrame) return;
       scaleFrame = requestAnimationFrame(applyScrollScale);
     }, { passive: true });
 
@@ -236,6 +299,7 @@
 
     window.addEventListener("resize", () => {
       fitWordmark();
+      updateDebug();
       if (touchViewport.matches) { applyScrollScale(); return; }
       if (lastPointerX === null) return;
       applyScale(Math.min(Math.max(lastPointerX, 0), window.innerWidth));
