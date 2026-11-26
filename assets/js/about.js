@@ -55,8 +55,8 @@
     const stretch = {
       minScale: 1,
       maxScale: 16,
-      sensitivity: 2 * Math.PI / 180,
-      deadZone: 0.08 * Math.PI / 180,
+      fullScaleDegrees: 35,
+      deadZoneDegrees: 0.08,
       exponent: 0.8,
       smoothing: 0.85 // Fraction of the newest sample.
     };
@@ -157,9 +157,9 @@
 
       // The absolute dot product gives the shortest turn from calibration across all three axes.
       const dot = calibration.reduce((sum, value, index) => sum + value * orientation[index], 0);
-      const angle = 2 * Math.acos(Math.min(1, Math.abs(dot)));
-      const movement = Math.max(0, angle - stretch.deadZone) / stretch.sensitivity;
-      const intensity = -Math.expm1(-Math.pow(movement, stretch.exponent));
+      const angleDegrees = 2 * Math.acos(Math.min(1, Math.abs(dot))) * 180 / Math.PI;
+      const movement = (angleDegrees - stretch.deadZoneDegrees) / (stretch.fullScaleDegrees - stretch.deadZoneDegrees);
+      const intensity = Math.pow(Math.min(1, Math.max(0, movement)), stretch.exponent);
       const largestScale = Math.min(stretch.maxScale, touchMaxScale);
       const smallestScale = Math.min(stretch.minScale, largestScale);
       setScale(smallestScale + (largestScale - smallestScale) * intensity);
