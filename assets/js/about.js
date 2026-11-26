@@ -1,13 +1,16 @@
 (() => {
   "use strict";
 
-  window.atContent.load("about/content.json").then(content => {
+  const motionButton = document.querySelector(".about-motion");
+
+  window.atContent.load("about/content.json?v=orientation-tall-1").then(content => {
     const statement = document.querySelector(".about-statement");
     const details = document.querySelector(".about-details");
     const wordmark = document.getElementById("about-scaled-text");
     const render = () => {
       const y = window.scrollY;
       const lang = window.atContent.lang();
+      motionButton.textContent = content.enableMotion[lang];
       statement.textContent = content.statement[lang];
       statement.style.whiteSpace = "pre-line";
       wordmark.replaceChildren(...Array.from(content.title[lang]).flatMap((letter, index) => index ? [document.createElement("br"), document.createTextNode(letter)] : [document.createTextNode(letter)]));
@@ -85,6 +88,7 @@
     let currentScale = 1;
     let touchMaxScale = maxScale;
     let naturalWidth = 1;
+    let fittingHeight = stage.clientHeight;
     let scaleFrame = 0;
 
     function setScale(scale) {
@@ -192,30 +196,40 @@
           applyScrollScale();
         }
       }
+      motionButton.hidden = !canUseOrientation() || !["prompt", "requesting", "error"].includes(permission);
+      motionButton.disabled = permission === "requesting";
       updateDebug();
     }
 
-    stage.addEventListener("click", async () => {
+    async function requestOrientationPermission() {
       if (!canUseOrientation() || (permission !== "prompt" && permission !== "error")) return;
       permission = "requesting";
       try {
         // Safari requires the call to start within the trusted tap, before any await.
         const request = orientationEvent.requestPermission();
-        updateDebug();
+        syncOrientation();
         const result = await request;
         permission = result === "granted" ? "granted" : "denied";
       } catch {
         permission = "error";
       }
       syncOrientation();
-    });
+    }
 
+    motionButton.addEventListener("click", requestOrientationPermission);
+    stage.addEventListener("click", requestOrientationPermission);
     mobileViewport.addEventListener("change", syncOrientation);
     reducedMotion.addEventListener("change", syncOrientation);
     syncOrientation();
 
     function fitWordmark() {
-      const availableHeight = stage.clientHeight - 6;
+      // Fit in unscaled coordinates so the mobile title keeps its original horizontal range.
+      fittingHeight = stage.clientHeight;
+      if (mobileViewport.matches) {
+        const heightScale = Number(getComputedStyle(stage).getPropertyValue("--about-title-height-scale")) || 1;
+        fittingHeight = Math.round(stage.getBoundingClientRect().height / heightScale);
+      }
+      const availableHeight = fittingHeight - 6;
       const availableWidth = stage.clientWidth - 12;
       let low = 12;
       let high = 200;
@@ -250,7 +264,7 @@
     function applyScrollScale() {
       scaleFrame = 0;
       if (!touchViewport.matches || orientation) return;
-      const distance = Math.max(1, stage.clientHeight * 1.5);
+      const distance = Math.max(1, (mobileViewport.matches ? fittingHeight : stage.clientHeight) * 1.5);
       const progress = Math.min(1, Math.max(0, window.scrollY * (tabletViewport.matches ? 1 : 2) / distance));
       setScale(1 + progress * (touchMaxScale - 1));
     }

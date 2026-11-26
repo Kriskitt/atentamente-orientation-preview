@@ -45,6 +45,9 @@
   white-space:nowrap;
   will-change:transform
 }
+.about-motion {
+  display:none
+}
 .about-statement {
   position:relative;
   z-index:2;
@@ -109,10 +112,24 @@
 }
 @media(max-width:440px) {
   .about-intro {
-    padding-top:min(43dvh,410px)
+    --about-title-base-height:min(41dvh,400px);
+    --about-title-height-scale:1.5;
+    padding-top:calc(min(43dvh,410px) + var(--about-title-base-height) * (var(--about-title-height-scale) - 1))
   }
   .about-title-stage {
-    height:min(41dvh,400px)
+    height:calc(var(--about-title-base-height) * var(--about-title-height-scale))
+  }
+  .about-scaled-text {
+    scale:1 var(--about-title-height-scale);
+    transform-origin:center top
+  }
+  .about-motion:not([hidden]):not(:empty) {
+    display:block;
+    margin:0 auto 10px;
+    font-size:var(--interface-size);
+    line-height:1.4;
+    text-decoration:underline;
+    text-underline-offset:2px
   }
   .about-statement {
     font-size:22px;
