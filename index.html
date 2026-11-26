@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+---------------------------------------------
+                 ATENTAMENTE
+
+[Design & Dev]   Atentamente
+[Frontend]       HTML5 / CSS3 / Vanilla JS
+[Content]        JSON / ES & EN
+
+---------------------------------------------
+-->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Atentamente es un estudio de diseño gráfico en Perú. Conoce su trabajo en identidad visual, comunicación y proyectos vinculados a la cultura.">
+  <meta property="og:title" content="Atentamente">
+  <meta property="og:description" content="Atentamente es un estudio de diseño gráfico en Perú. Conoce su trabajo en identidad visual, comunicación y proyectos vinculados a la cultura.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://atentamente.pe/">
+  <meta property="og:image" content="https://atentamente.pe/assets/content/home/desktop-tablet/01-home.webp">
+  <link rel="canonical" href="https://atentamente.pe/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Atentamente">
+  <meta name="twitter:description" content="Atentamente es un estudio de diseño gráfico en Perú. Conoce su trabajo en identidad visual, comunicación y proyectos vinculados a la cultura.">
+  <meta name="theme-color" content="#000000">
+  <title>Atentamente</title>
+  <link rel="icon" href="assets/favicon/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="96x96" href="assets/favicon/favicon-96x96.png">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg">
+  <link rel="apple-touch-icon" href="assets/favicon/apple-touch-icon.png">
+  <link rel="manifest" href="assets/favicon/site.webmanifest">
+  <script src="assets/js/global.js"></script>
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body class="home-page">
+<header class="site-header" aria-label="Site header">
+  <a class="site-header__brand" href="./">ATENTAMENTE</a>
+  <nav class="site-header__nav" aria-label="Primary navigation">
+    <a href="work/">Work</a><span aria-hidden="true">,  </span><a href="actions/">Actions</a><span aria-hidden="true">,  </span><a href="about/">About</a>
+  </nav>
+</header>
+<main class="route-main home-main" id="main">
+  <h1 class="sr-only">Atentamente</h1>
+  <section class="home-stage" id="home-slider" aria-label="Media gallery" data-home-slider>
+    <nav class="home-slider-nav" aria-label="Project media">
+      <button class="home-nav-button prev" type="button" aria-label="Previous slide">←</button>
+      <span class="home-counter" aria-live="polite">001 / 011</span>
+      <button class="home-nav-button next" type="button" aria-label="Next slide">→</button>
+    </nav>
+    <div class="home-layer home-layer-a" aria-hidden="false">
+      <div class="home-media-shell">
+      </div>
+    </div>
+    <div class="home-layer home-layer-b" aria-hidden="true">
+      <div class="home-media-shell">
+      </div>
+    </div>
+
+    <button class="home-hit-area prev" type="button" aria-label="Previous slide"></button>
+    <button class="home-hit-area next" type="button" aria-label="Next slide"></button>
+    <div class="home-transition-edge" aria-hidden="true"></div>
+    <div class="home-cursor" aria-hidden="true">→</div>
+    <p class="sr-only" id="home-slider-status" aria-live="polite"></p>
+  </section>
+</main>
+<script src="assets/js/content.js" defer></script>
+<script src="assets/js/home-slider.js" defer></script>
+</body>
+</html>
