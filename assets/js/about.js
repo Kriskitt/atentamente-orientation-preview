@@ -155,10 +155,15 @@
       orientationFrame = 0;
       if (!orientation) return;
 
-      // The absolute dot product gives the shortest turn from calibration across all three axes.
-      const dot = calibration.reduce((sum, value, index) => sum + value * orientation[index], 0);
-      const angleDegrees = 2 * Math.acos(Math.min(1, Math.abs(dot))) * 180 / Math.PI;
-      const movement = (angleDegrees - stretch.deadZoneDegrees) / (stretch.fullScaleDegrees - stretch.deadZoneDegrees);
+      // Take the scalar and lateral components of conjugate(calibration) × orientation.
+      const [restW, restX, restY, restZ] = calibration;
+      const [w, x, y, z] = orientation;
+      const relativeW = restW * w + restX * x + restY * y + restZ * z;
+      const relativeY = restW * y + restX * z - restY * w - restZ * x;
+      // The signed lateral projection is unchanged by a quaternion sign flip and passes through zero at a half turn.
+      const leftwardSine = -2 * relativeW * relativeY;
+      const leftwardDegrees = Math.asin(Math.max(-1, Math.min(1, leftwardSine))) * 180 / Math.PI;
+      const movement = (leftwardDegrees - stretch.deadZoneDegrees) / (stretch.fullScaleDegrees - stretch.deadZoneDegrees);
       const intensity = Math.pow(Math.min(1, Math.max(0, movement)), stretch.exponent);
       const largestScale = Math.min(stretch.maxScale, touchMaxScale);
       const smallestScale = Math.min(stretch.minScale, largestScale);
